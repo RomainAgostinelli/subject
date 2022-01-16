@@ -7,49 +7,54 @@ listen on the evolution of the subject and will be notified when an update appea
 
 ## Usage
 
-#### Create an Observer
-
-First, we must create an observer. To do so, you can call the method `FromFunc` in the `obs` package.
-
-```go
-myObs := obs.FromFunc[string](
-	func (val string) {
-        fmt.Println(val)
-    },
-)
-```
-
 #### Create a Subject
 
-Now we can create a simple Subject that manage the kind of observer we declared:
+First, we need to create a subject:
 
 ```go
-subject := New[*obs.Observer[string], string]()
+subject := New[string]()
 ```
 
 #### Subscribe / Unsubscribe
 
-And finally we can subscribe observers to the subject we created:
+Then, we can subscribe on this subject:
 
 ```go
-obs1 := obs.FromFunc(func (t string) {})
-obs2 := obs.FromFunc(func (t string) {})
-obs3 := obs.FromFunc(func (t string) {})
-sub.Subscribe(obs1, obs2, obs3)
+subscription := subject.Subscribe(
+    func(val string)
+	    fmt.Println(val)
+	},
+)
 ```
 
-And when we don't want to listen on the subject anymore:
+When we subscribe, we get a subscription with which we can unsubscribe:
 
 ```go
-sub.Unsubscribe(obs2)
+subscription.Unsubscribe()
 ```
 
 #### Publish data
 
-To publish data to all observers via our Subject:
+For publishing data, there is two options:
+* Async: The data will be delivered one day. The asynchronous implements `Lazy Loading`, so it will not execute
+the function until there is at least one subscriber.
+* Synchronous: The sender will wait for all observers to receive and treats the data before continuing.
 
+##### Asynchronous push
 ```go
-sub.Publish("25")
+subject.PubAsync(
+	func() string {
+        time.Sleep(time.Second)
+        return "Test - 1"
+    },
+)
+```
+
+The asynchronous push can be useful for `http` requests. The `Async` call is non-blocking.
+
+##### Synchronous push
+```go
+subject.Pub("Test - 2")
 ```
 
 #### Full example
@@ -59,26 +64,47 @@ package subject
 
 import (
 	"fmt"
-	"observer/obs"
 	"time"
 )
 
-func ExampleNew() {
-	myObs := obs.FromFunc[string](
+func ExampleOf() {
+	// just create a simple web service
+	go func() {
+		http.HandleFunc(
+			"/test", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("TEST"))
+			},
+		)
+		http.ListenAndServe(":64999", nil)
+	}()
+
+	// wait a bit for the endpoint to be served
+	time.Sleep(time.Second * 2)
+
+	// Demonstration
+	subject := Of(
+		func() string {
+			fmt.Println("LAZY EXEC")
+			get, _ := http.Get("http://localhost:64999/test")
+			defer get.Body.Close()
+			all, _ := io.ReadAll(get.Body)
+			return string(all)
+		},
+	)
+
+	fmt.Println("MAIN 1")
+	subject.Subscribe(
 		func(val string) {
 			fmt.Println(val)
 		},
 	)
-	subject := New[*obs.Observer[string], string]()
-	subject.Subscribe(myObs)
-	myObs.Listen()
-	subject.Pub("Test - 1")
-	subject.Pub("Test - 2")
-	time.Sleep(time.Second)
-	subject.Unsubscribe(myObs)
+	fmt.Println("MAIN 2")
+	time.Sleep(time.Second * 3)
 	// Output:
-	// Test - 1
-	// Test - 2
+	// MAIN 1
+	// MAIN 2 (or LAZY EXEC)
+	// LAZY EXEC (or MAIN 2)
+	// TEST
 }
 ```
 

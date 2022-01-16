@@ -2,85 +2,122 @@ package subject
 
 import (
 	"fmt"
-	"observer/obs"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 )
 
 func ExampleNew() {
-	myObs := obs.FromFunc[string](
+	subject := New[string]()
+	subscription := subject.Subscribe(
 		func(val string) {
 			fmt.Println(val)
 		},
 	)
-	subject := New[*obs.Observer[string], string]()
-	subject.Subscribe(myObs)
-	myObs.Listen()
-	subject.Pub("Test - 1")
+
+	subject.PubAsync(
+		func() string {
+			time.Sleep(time.Second)
+			return "Test - 1"
+		},
+	)
 	subject.Pub("Test - 2")
 	time.Sleep(time.Second)
-	subject.Unsubscribe(myObs)
+	subscription.Unsubscribe()
 	// Output:
-	// Test - 1
 	// Test - 2
+	// Test - 1
+}
+
+func ExampleOf() {
+	// just create a simple web service
+	go func() {
+		http.HandleFunc(
+			"/test", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("TEST"))
+			},
+		)
+		http.ListenAndServe(":64999", nil)
+	}()
+
+	// wait a bit for the endpoint to be served
+	time.Sleep(time.Second * 2)
+
+	// Demonstration
+	subject := Of(
+		func() string {
+			fmt.Println("LAZY EXEC")
+			get, _ := http.Get("http://localhost:64999/test")
+			defer get.Body.Close()
+			all, _ := io.ReadAll(get.Body)
+			return string(all)
+		},
+	)
+
+	fmt.Println("MAIN 1")
+	subject.Subscribe(
+		func(val string) {
+			fmt.Println(val)
+		},
+	)
+	fmt.Println("MAIN 2")
+	time.Sleep(time.Second * 3)
+	// Output:
+	// MAIN 1
+	// MAIN 2
+	// LAZY EXEC
+	// TEST
 }
 
 func TestNewSubject(t *testing.T) {
 	// give nil, must panic
-	sub := New[*obs.Observer[string], string]()
+	sub := New[string]()
 	sub.Pub("25")
-	if len(sub.safeObs.observers) != 0 {
+	if sub.distributor.hasObserver() {
 		t.Fatal("observer list too big")
 	}
 }
 
 func TestSubject_Subscribe_Unsubscribe(t *testing.T) {
-	sub := New[*obs.Observer[string], string]()
-	obs1 := obs.FromFunc(func(t string) {})
-	obs2 := obs.FromFunc(func(t string) {})
-	obs3 := obs.FromFunc(func(t string) {})
-	sub.Subscribe(obs1, obs2, obs3)
-	if len(sub.safeObs.observers) != 3 {
-		t.Fatal("observer list must be 3")
+	sub := New[string]()
+	subs1 := sub.Subscribe(func(t string) {})
+	subs2 := sub.Subscribe(func(t string) {})
+	subs3 := sub.Subscribe(func(t string) {})
+
+	if !sub.distributor.hasObserver() {
+		t.Fatal("It must have observer")
 	}
-	sub.Unsubscribe(obs1)
-	if len(sub.safeObs.observers) != 2 {
-		t.Fatal("observer list must be 2")
+	subs1.Unsubscribe()
+	if !sub.distributor.hasObserver() {
+		t.Fatal("It must have observer")
 	}
-	sub.Unsubscribe(obs2)
-	sub.Unsubscribe(obs1)
-	if len(sub.safeObs.observers) != 1 {
-		t.Fatal("observer list must be 1")
-	}
-	sub.Unsubscribe(obs3)
-	if len(sub.safeObs.observers) != 0 {
-		t.Fatal("observer list must be empty")
+	subs2.Unsubscribe()
+	subs3.Unsubscribe()
+
+	if sub.distributor.hasObserver() {
+		t.Fatal("Subject must not have observers anymore")
 	}
 }
 
-func TestSubject_Publish(t *testing.T) {
-	sub := New[*obs.Observer[string], string]()
+func TestSubject_Pub(t *testing.T) {
+	sub := New[string]()
 	res := make([]string, 3)
-	obs1 := obs.FromFunc(
+	sub.Subscribe(
 		func(t string) {
 			res[0] = t
 		},
 	)
-	obs2 := obs.FromFunc(
+	sub.Subscribe(
 		func(t string) {
 			res[1] = t
 		},
 	)
-	obs3 := obs.FromFunc(
+	sub.Subscribe(
 		func(t string) {
 			res[2] = t
 		},
 	)
-	obss := []*obs.Observer[string]{obs1, obs2, obs3}
-	sub.Subscribe(obss...)
-	for _, o := range obss {
-		o.Listen()
-	}
 	testMsg := "TEST"
 	sub.Pub(testMsg)
 	time.Sleep(time.Second * 3)

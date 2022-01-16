@@ -1,4 +1,4 @@
-package datastore
+package subject
 
 import (
 	"constraints"
@@ -6,17 +6,17 @@ import (
 	"sync"
 )
 
-// Datastore is an Override Circular Buffer. It is an implementation of a circular buffer
+// datastore is an Override Circular Buffer. It is an implementation of a circular buffer
 // that overrides the oldest element when it is full.
 // It is thread safe.
-type Datastore[T any] struct {
+type datastore[T any] struct {
 	mutex                    sync.Mutex
 	buff                     []T
 	pos, actualSize, maxSize int
 }
 
-func New[T any](maxSize int) *Datastore[T] {
-	return &Datastore[T]{
+func newDatastore[T any](maxSize int) *datastore[T] {
+	return &datastore[T]{
 		mutex:      sync.Mutex{},
 		buff:       make([]T, maxSize),
 		pos:        0,
@@ -25,8 +25,8 @@ func New[T any](maxSize int) *Datastore[T] {
 	}
 }
 
-// Push pushes a new data inside the buffer. If the buffer is full, it overrides the oldest one.
-func (c *Datastore[T]) Push(data T) {
+// push pushes a new data inside the buffer. If the buffer is full, it overrides the oldest one.
+func (c *datastore[T]) push(data T) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.pos = (c.pos + 1) % c.maxSize
@@ -34,29 +34,29 @@ func (c *Datastore[T]) Push(data T) {
 	c.actualSize = max(c.actualSize+1, c.maxSize)
 }
 
-// EMPTY is the error returned when trying to get an element from the buffer but this one is empty.
-var EMPTY = errors.New("EMPTY")
+// empty is the error returned when trying to get an element from the buffer but this one is empty.
+var empty = errors.New("empty")
 
-// GetLast returns the last element that have been in the buffer. If no elements in the buffer, it returns
-// an EMPTY error.
-func (c *Datastore[T]) GetLast() (T, error) {
+// last returns the last element that have been in the buffer. If no elements in the buffer, it returns
+// an empty error.
+func (c *datastore[T]) last() (T, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.actualSize <= 0 {
-		return c.buff[c.pos], EMPTY
+		return c.buff[c.pos], empty
 	}
 	return c.buff[c.pos], nil
 }
 
-// GetNLasts returns the lasts elements that have been added in the buffer.
+// nLasts returns the lasts elements that have been added in the buffer.
 // If n > actual size, it will return the maximum it can.
-// If no elements in the buffer, it returns an EMPTY error.
-func (c *Datastore[T]) GetNLasts(n int) ([]T, error) {
+// If no elements in the buffer, it returns an empty error.
+func (c *datastore[T]) nLasts(n int) ([]T, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	lasts := make([]T, 0, n)
 	if c.actualSize <= 0 {
-		return lasts, EMPTY
+		return lasts, empty
 	}
 	for i := 0; i < n && i < c.actualSize; i++ {
 		pos := c.pos - i
