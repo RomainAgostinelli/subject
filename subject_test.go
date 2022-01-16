@@ -2,73 +2,90 @@ package subject
 
 import (
 	"fmt"
+	"observer/obs"
 	"testing"
+	"time"
 )
 
-// MyObs is an example implementation of an Observer
-type MyObs struct {
-	rcv string // rcv for test purpose, stores the message received via Notify in continue into this variable
-}
-
-func (m *MyObs) Notify(val string) {
-	m.rcv = val
-	fmt.Println(val)
-}
-
-func ExampleNewSubject() {
-	myObs := &MyObs{}
-	subject := NewSubject[*MyObs, string]()
+func ExampleNew() {
+	myObs := obs.FromFunc[string](
+		func(val string) {
+			fmt.Println(val)
+		},
+	)
+	subject := New[*obs.Observer[string], string]()
 	subject.Subscribe(myObs)
-	subject.Publish("Test - 1")
+	myObs.Listen()
+	subject.Pub("Test - 1")
+	subject.Pub("Test - 2")
+	time.Sleep(time.Second)
 	subject.Unsubscribe(myObs)
-	subject.Publish("Test - 2")
-	// Output: Test - 1
+	// Output:
+	// Test - 1
+	// Test - 2
 }
 
 func TestNewSubject(t *testing.T) {
 	// give nil, must panic
-	sub := NewSubject[*MyObs, string]()
-	sub.Publish("25")
-	if len(sub.obs) != 0 {
+	sub := New[*obs.Observer[string], string]()
+	sub.Pub("25")
+	if len(sub.safeObs.observers) != 0 {
 		t.Fatal("observer list too big")
 	}
 }
 
 func TestSubject_Subscribe_Unsubscribe(t *testing.T) {
-	sub := NewSubject[*MyObs, string]()
-	obs1 := &MyObs{}
-	obs2 := &MyObs{}
-	obs3 := &MyObs{}
+	sub := New[*obs.Observer[string], string]()
+	obs1 := obs.FromFunc(func(t string) {})
+	obs2 := obs.FromFunc(func(t string) {})
+	obs3 := obs.FromFunc(func(t string) {})
 	sub.Subscribe(obs1, obs2, obs3)
-	if len(sub.obs) != 3 {
+	if len(sub.safeObs.observers) != 3 {
 		t.Fatal("observer list must be 3")
 	}
 	sub.Unsubscribe(obs1)
-	if len(sub.obs) != 2 {
+	if len(sub.safeObs.observers) != 2 {
 		t.Fatal("observer list must be 2")
 	}
 	sub.Unsubscribe(obs2)
 	sub.Unsubscribe(obs1)
-	if len(sub.obs) != 1 {
+	if len(sub.safeObs.observers) != 1 {
 		t.Fatal("observer list must be 1")
 	}
 	sub.Unsubscribe(obs3)
-	if len(sub.obs) != 0 {
+	if len(sub.safeObs.observers) != 0 {
 		t.Fatal("observer list must be empty")
 	}
 }
 
 func TestSubject_Publish(t *testing.T) {
-	sub := NewSubject[*MyObs, string]()
-	obs1 := &MyObs{}
-	obs2 := &MyObs{}
-	obs3 := &MyObs{}
-	obss := []*MyObs{obs1, obs2, obs3}
+	sub := New[*obs.Observer[string], string]()
+	res := make([]string, 3)
+	obs1 := obs.FromFunc(
+		func(t string) {
+			res[0] = t
+		},
+	)
+	obs2 := obs.FromFunc(
+		func(t string) {
+			res[1] = t
+		},
+	)
+	obs3 := obs.FromFunc(
+		func(t string) {
+			res[2] = t
+		},
+	)
+	obss := []*obs.Observer[string]{obs1, obs2, obs3}
 	sub.Subscribe(obss...)
+	for _, o := range obss {
+		o.Listen()
+	}
 	testMsg := "TEST"
-	sub.Publish(testMsg)
-	for _, obs := range obss {
-		if obs.rcv != testMsg {
+	sub.Pub(testMsg)
+	time.Sleep(time.Second * 3)
+	for _, val := range res {
+		if val != testMsg {
 			t.Fatal("the observer must have received the message")
 		}
 	}
