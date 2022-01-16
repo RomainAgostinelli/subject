@@ -13,9 +13,9 @@ First, we must create an observer. To do so, you can call the method `FromFunc` 
 
 ```go
 myObs := obs.FromFunc[string](
-func (val string) {
-fmt.Println(val)
-},
+	func (val string) {
+        fmt.Println(val)
+    },
 )
 ```
 
