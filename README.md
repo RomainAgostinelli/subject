@@ -67,8 +67,8 @@ the request is made lazily when the `Subscribe` appears.
 package subject
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 )
 
 func ExampleOf() {
