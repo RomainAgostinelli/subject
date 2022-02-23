@@ -1,7 +1,6 @@
 package subject
 
 import (
-	"constraints"
 	"errors"
 	"sync"
 )
@@ -68,8 +67,14 @@ func (c *datastore[T]) nLasts(n int) ([]T, error) {
 	return lasts, nil
 }
 
+// ordered replaces the old constraints.Ordered which define the types that support <,<=,>,>= comparisons as
+// the constraints.Ordered has been moved to x/exp package: https://github.com/golang/go/issues/50792#issue-1113355741
+type ordered interface {
+	~uint8 | ~uint16 | ~uint32 | ~uint64 | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~string | ~float32 | ~float64
+}
+
 // max gives the maximum of multiple elements. The number of element must be greater than 0.
-func max[T constraints.Ordered](els ...T) T {
+func max[T ordered](els ...T) T {
 	maximum := els[0]
 	for i := 1; i < len(els); i++ {
 		if els[i] < maximum {
